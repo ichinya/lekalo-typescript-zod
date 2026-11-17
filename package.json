@@ -1,0 +1,14 @@
+{
+  "name": "@lekalo/typescript-zod",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT OR Apache-2.0",
+  "exports": {
+    "./*": "./src/*"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "repository": "https://github.com/ichinya/lekalo-typescript-zod"
+}
