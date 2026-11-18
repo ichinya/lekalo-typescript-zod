@@ -88,6 +88,7 @@ jobs:
           mv "$adapter/node_modules/@lekalo/typescript-zod" "$RUNNER_TEMP/pinned-zod"
           node -e 'require("node:fs").symlinkSync(require("node:path").resolve(".ci/candidate"), require("node:path").join(process.env.LEKALO_TYPESCRIPT_ROOT,"adapters/node-typescript/node_modules/@lekalo/typescript-zod"),process.platform==="win32"?"junction":"dir")'
           node "$adapter/build.mjs"
+          node "$LEKALO_TYPESCRIPT_ROOT/scripts/regen-adapter-manifest.mjs"
       - name: Run the Zod generator suite (issue #45)
         run: node scripts/test-node-zod-gen.mjs
       - name: Verify the generation artifact against the conformance battery (issue #45)
