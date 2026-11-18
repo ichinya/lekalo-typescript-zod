@@ -39,6 +39,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: ichinya/lekalo/.github/actions/test-official-package@6f5387d98092d73f011003e62c3a59859b7271e8
+      - uses: ichinya/lekalo-adapter-sdk/.github/actions/package-contract@ebe6ce17bd948d52850fb1a600e07a1ddbee7062
         with:
-          package: lekalo-typescript-zod
+          host: 9eb07ce8f21f96a9a160d382ac6280b9fa0fbcbe
