@@ -1,0 +1,44 @@
+name: Package CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  adapter:
+    runs-on: ubuntu-latest
+    env:
+      LEKALO_TYPESCRIPT_ROOT: ${{ github.workspace }}/.ci/lekalo-typescript
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: ichinya/lekalo-typescript
+          ref: 3ab3f7c1619e83cc46cdb6328ddda83ea78a482c
+          path: .ci/lekalo-typescript
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.x
+          package-manager-cache: false
+      - name: Build the pinned adapter with this checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          adapter="$LEKALO_TYPESCRIPT_ROOT/adapters/node-typescript"
+          npm ci --prefix "$adapter" --ignore-scripts --no-audit --no-fund
+          node "$adapter/provision-compiler.mjs"
+          deps="$adapter/node_modules/@lekalo"
+          mv "$deps/typescript-zod" "$RUNNER_TEMP/pinned-typescript-zod"
+          ln -s "$GITHUB_WORKSPACE" "$deps/typescript-zod"
+          node "$adapter/build.mjs"
+      - run: node --test --test-concurrency=1 adapters/node-typescript/test/zod-*.test.mjs
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ichinya/lekalo/.github/actions/test-official-package@6f5387d98092d73f011003e62c3a59859b7271e8
+        with:
+          package: lekalo-typescript-zod
