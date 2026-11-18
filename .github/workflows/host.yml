@@ -21,7 +21,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: ichinya/lekalo-adapter-sdk/.github/actions/stage-host-tests@2c8009f10afebce94a60e14470b8fec115d9a87c
+      - uses: ichinya/lekalo-adapter-sdk/.github/actions/stage-host-tests@ebe6ce17bd948d52850fb1a600e07a1ddbee7062
         with:
           host: 9eb07ce8f21f96a9a160d382ac6280b9fa0fbcbe
       - name: Provision pinned external integration packages
@@ -95,6 +95,9 @@ jobs:
           set -euo pipefail
           PROFILE_JSON=$(tr -d '[:space:]' < tests/external/lekalo-typescript/tests/fixtures/node-typescript-scanner/protocol/generation.profile.json)
           "$LEKALO_DEBUG_BIN" adapter test --profile default --report junit -- node tests/external/lekalo-typescript/adapters/node-typescript/adapter-zod.mjs --lekalo-project-profile-json "$PROFILE_JSON"
+      - name: Run the adapter integration tests through Cargo
+        run: |
+          cargo test --locked -p lekalo-cli --test zod_pipeline
       - name: Remove the CI-only AppArmor launcher prerequisite
         if: always() && runner.os == 'Linux'
         timeout-minutes: 1
