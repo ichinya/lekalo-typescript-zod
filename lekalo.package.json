@@ -1,0 +1,10 @@
+{
+  "schema": "lekalo/package/v1",
+  "kind": "rules",
+  "id": "lekalo-typescript-zod",
+  "version": "0.1.0",
+  "files": [
+    "contracts/schemas.json"
+  ],
+  "rules": "contracts/schemas.json"
+}
