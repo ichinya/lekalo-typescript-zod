@@ -1,0 +1,107 @@
+name: Host integration
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  CARGO_INCREMENTAL: '0'
+  CARGO_PROFILE_DEV_DEBUG: '0'
+  CARGO_PROFILE_TEST_DEBUG: '0'
+jobs:
+  compatibility:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-26.04, windows-latest, macos-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: ichinya/lekalo-adapter-sdk/.github/actions/stage-host-tests@2c8009f10afebce94a60e14470b8fec115d9a87c
+        with:
+          host: 9eb07ce8f21f96a9a160d382ac6280b9fa0fbcbe
+      - name: Provision pinned external integration packages
+        run: node scripts/external-tool.mjs --provision
+      - name: Use physical temporary paths for synthetic project fixtures
+        run: |
+          node --input-type=module <<'NODE'
+          import {appendFileSync, realpathSync} from 'node:fs';
+          import {tmpdir} from 'node:os';
+          // The native Windows resolver also expands 8.3 names.
+          const root = realpathSync.native(tmpdir());
+          for (const name of ['TEMP', 'TMP', 'TMPDIR']) {
+            appendFileSync(process.env.GITHUB_ENV, `${name}=${root}\n`);
+          }
+          NODE
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build the pinned host and its selected fixture services
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/external-tool.mjs --build-services
+          cargo build --locked -p lekalo-cli --bins
+          node -e 'const p=require("node:path"), fs=require("node:fs"), ext=process.platform==="win32"?".exe":""; for(const [k,n] of [["LEKALO_BIN","lekalo"],["LEKALO_DEBUG_BIN","lekalo"],["LEKALO_SDK_ORACLE","adapter-sdk-oracle"]]) fs.appendFileSync(process.env.GITHUB_ENV,k+"="+p.resolve("target/debug/"+n+ext)+"\n")'
+      - name: Provision exact Ajv 8.20.0 outside the checkout (issues #32, #48)
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/lekalo-ajv-8.20.0" --ignore-scripts --no-audit --no-fund --no-save ajv@8.20.0
+          export NODE_PATH="$RUNNER_TEMP/lekalo-ajv-8.20.0/node_modules"
+          test "$(node -p "require('ajv/package.json').version")" = "8.20.0"
+      - name: Provision the Linux process confinement backend
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes bubblewrap ripgrep
+      - name: Load the CI-only AppArmor launcher prerequisite
+        if: runner.os == 'Linux'
+        id: apparmor
+        timeout-minutes: 1
+        run: |
+          set -euo pipefail
+          bash .github/ci/bwrap-apparmor.sh load
+      - name: Verify the Linux namespace backend before adapter probes
+        if: runner.os == 'Linux'
+        run: /usr/bin/bwrap --unshare-all --ro-bind / / --dev /dev --proc /proc /bin/true
+      - name: Provision the vendored compiler bundle custody (issue #44)
+        run: |
+          set -euo pipefail
+          npm ci --prefix "$LEKALO_TYPESCRIPT_ROOT/adapters/node-typescript" --ignore-scripts --no-audit --no-fund
+          node tests/external/lekalo-typescript/adapters/node-typescript/provision-compiler.mjs
+          node tests/external/lekalo-typescript/adapters/node-typescript/build.mjs --check
+      - name: Locate the built debug CLI for adapter conformance
+        run: |
+          node --input-type=module <<'NODE'
+          import { accessSync, appendFileSync, constants } from 'node:fs';
+          import { resolve, sep } from 'node:path';
+          const binary = resolve('target/debug', process.platform === 'win32' ? 'lekalo.exe' : 'lekalo').split(sep).join('/');
+          accessSync(binary, constants.X_OK);
+          appendFileSync(process.env.GITHUB_ENV, `LEKALO_DEBUG_BIN=${binary}\n`);
+          NODE
+      - name: Bundle the candidate framework provider
+        run: |
+          adapter="$LEKALO_TYPESCRIPT_ROOT/adapters/node-typescript"
+          mv "$adapter/node_modules/@lekalo/typescript-zod" "$RUNNER_TEMP/pinned-zod"
+          node -e 'require("node:fs").symlinkSync(require("node:path").resolve(".ci/candidate"), require("node:path").join(process.env.LEKALO_TYPESCRIPT_ROOT,"adapters/node-typescript/node_modules/@lekalo/typescript-zod"),process.platform==="win32"?"junction":"dir")'
+          node "$adapter/build.mjs"
+      - name: Run the Zod generator suite (issue #45)
+        run: node scripts/test-node-zod-gen.mjs
+      - name: Verify the generation artifact against the conformance battery (issue #45)
+        run: |
+          set -euo pipefail
+          PROFILE_JSON=$(tr -d '[:space:]' < tests/external/lekalo-typescript/tests/fixtures/node-typescript-scanner/protocol/generation.profile.json)
+          "$LEKALO_DEBUG_BIN" adapter test --profile default --report junit -- node tests/external/lekalo-typescript/adapters/node-typescript/adapter-zod.mjs --lekalo-project-profile-json "$PROFILE_JSON"
+      - name: Remove the CI-only AppArmor launcher prerequisite
+        if: always() && runner.os == 'Linux'
+        timeout-minutes: 1
+        run: |
+          set -euo pipefail
+          bash .github/ci/bwrap-apparmor.sh remove
+          test "$(sysctl -n kernel.apparmor_restrict_unprivileged_userns)" = 1
+          if sudo grep -Eq '^lekalo-ci-bwrap(-child)? ' /sys/kernel/security/apparmor/profiles; then
+            exit 1
+          fi

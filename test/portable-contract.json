@@ -1,0 +1,6 @@
+{
+  "runtime": "gh/ichinya/lekalo-typescript#1c69191ab36bd9d0b220a6ad274a66bc6bab7836",
+  "path": "types.ts",
+  "valid": "import { z } from 'zod'; export const Cat = z.object({});",
+  "invalid": "import { z } from 'another'; export const Cat = z.object({});"
+}
